@@ -1,239 +1,205 @@
 # Álbum de Fotos API con NestJS y PostgreSQL
 
-Desarrollo de una API REST utilizando Node.js y NestJS para la gestión de un álbum de fotos, con los datos guardados en una base de datos PostgreSQL.
+API REST para gestionar fotos y consultar álbumes, con persistencia en PostgreSQL mediante TypeORM. El proyecto está organizado en módulos, controladores, servicios y entidades, y todas las rutas comienzan con `/api`.
 
-El proyecto implementa un servidor HTTP organizado en módulos, controladores y servicios, que expone un CRUD completo con rutas para listar, consultar, crear, actualizar y eliminar fotos, respondiendo siempre en formato JSON con los códigos de estado HTTP correspondientes. A diferencia de la versión anterior, donde las fotos vivían en un arreglo en memoria, ahora se guardan en la tabla `fotos` de PostgreSQL usando TypeORM, por lo que los datos se conservan aunque el servidor se reinicie.
+## Novedades
 
-## Tecnologías utilizadas
+- Módulo de álbumes para listar los álbumes y consultar sus fotos.
+- Relación de un álbum con muchas fotos. Una foto puede no tener álbum; al eliminar un álbum, sus fotos se conservan con la relación en `null`.
+- Relación de muchas fotos con muchas etiquetas mediante la tabla `foto_etiquetas`.
+- Filtros por rango de calificación, búsqueda por título sin distinguir mayúsculas y minúsculas, y filtro por texto exacto de etiqueta.
+- Paginación con `page` y `limit`, y orden opcional por calificación.
+- Respuesta del listado de fotos con los campos `data`, `total`, `page` y `limit`.
+- Carga de ejemplo con 3 álbumes, 6 etiquetas y 20 fotos.
+- Configuración de Vitest, Oxlint, Prettier y finales de línea LF.
 
-- **Node.js** como entorno de ejecución de JavaScript del lado del servidor.
-- **NestJS 12** para la creación del servidor, la definición de módulos, controladores y servicios, y la inyección de dependencias.
-- **TypeScript 6** para tipar las entidades, los parámetros y las respuestas.
-- **PostgreSQL** como base de datos donde se guardan las fotos.
-- **TypeORM** junto con `@nestjs/typeorm` para mapear la clase `Foto` a una tabla y trabajar con ella mediante un repositorio.
-- **pg** como controlador que conecta Node.js con PostgreSQL.
-- **ES Modules** (`"type": "module"`), por lo que las importaciones relativas terminan en `.js`.
-- **Nest CLI** (`nest start --watch`) para reiniciar el servidor automáticamente al guardar cambios.
-- **curl** para probar las rutas de la API desde la terminal.
+## Tecnologías
 
-## Estructura del proyecto
+- Node.js, NestJS 12 y TypeScript 6.
+- PostgreSQL, TypeORM y el controlador `pg`.
+- ES Modules: las importaciones relativas utilizan la extensión `.js`.
+- Vitest y Supertest para pruebas; Oxlint y Prettier para revisión y formato.
+
+## Estructura
 
 ```text
 backend/
-├─ src/
-│  ├─ fotos/
-│  │  ├─ entities/
-│  │  │  └─ foto.entity.ts      # Entidad Foto: define la tabla "fotos" y sus columnas
-│  │  ├─ fotos.controller.ts    # Define las rutas /fotos y recibe las peticiones
-│  │  ├─ fotos.service.ts       # Lógica del negocio usando el repositorio de TypeORM
-│  │  └─ fotos.module.ts        # Registra la entidad, el controlador y el servicio
-│  │
-│  ├─ app.module.ts             # Módulo raíz: conexión a PostgreSQL e importa FotosModule
-│  ├─ main.ts                   # Crea la app, define el prefijo /api e inicia el servidor
-│  └─ seed.ts                   # Script que llena la tabla con 10 fotos de ejemplo
-│
-├─ nest-cli.json                # Configuración del Nest CLI
-├─ tsconfig.json                # Configuración de TypeScript
-├─ tsconfig.build.json          # Configuración de TypeScript para compilar
-├─ package.json                 # Dependencias y scripts del proyecto
-└─ .gitignore                   # Excluye node_modules, dist y .env del repositorio
+├── src/
+│   ├── albumes/
+│   │   ├── entities/album.entity.ts
+│   │   ├── albumes.controller.ts
+│   │   ├── albumes.service.ts
+│   │   └── albumes.module.ts
+│   ├── fotos/
+│   │   ├── entities/
+│   │   │   ├── foto.entity.ts
+│   │   │   └── etiqueta.entity.ts
+│   │   ├── fotos.controller.ts
+│   │   ├── fotos.service.ts
+│   │   └── fotos.module.ts
+│   ├── app.controller.ts          # Controlador de ejemplo para la prueba unitaria
+│   ├── app.controller.spec.ts
+│   ├── app.service.ts
+│   ├── app.module.ts              # Conexión a PostgreSQL y módulos de la API
+│   ├── main.ts                    # Prefijo /api e inicio del servidor
+│   └── seed.ts                    # Reinicio y carga de datos de ejemplo
+├── test/app.e2e-spec.ts
+├── vitest.config.ts
+├── vitest.config.e2e.ts
+├── .gitattributes
+├── .oxlintrc.json
+├── .prettierrc
+└── package.json
 ```
+
+## Modelo de datos
+
+La entidad `Foto` contiene `id`, `titulo`, `descripcion`, `calificacion`, `ruta`, `fotografo`, `creadoEn` y `actualizadoEn`, además de las relaciones `album` y `etiquetas`. La descripción y el fotógrafo son opcionales; la calificación tiene un valor predeterminado de `0`.
+
+Un `Album` tiene `id`, `nombre` y la colección `fotos`. Una `Etiqueta` tiene `id`, `texto` único y su relación con las fotos. La tabla intermedia `foto_etiquetas` vincula ambas entidades usando las columnas `fotoId` y `etiqueta_id`.
+
+El listado y la consulta individual de fotos cargan el álbum y las etiquetas. La consulta de fotos de un álbum devuelve el objeto del álbum con su colección `fotos`.
 
 ## Rutas de la API
 
-| Método   | Ruta             | Descripción                        | Respuestas posibles |
-| -------- | ---------------- | ---------------------------------- | ------------------- |
-| `GET`    | `/api/fotos`     | Lista todas las fotos ordenadas por `id` | `200`         |
-| `GET`    | `/api/fotos/:id` | Obtiene una foto por su `id`       | `200`, `400`, `404` |
-| `POST`   | `/api/fotos`     | Crea una nueva foto                | `201`               |
-| `PATCH`  | `/api/fotos/:id` | Actualiza solo los campos enviados | `200`, `400`, `404` |
-| `DELETE` | `/api/fotos/:id` | Elimina una foto                   | `204`, `400`, `404` |
+| Método | Ruta | Descripción | Respuestas |
+| --- | --- | --- | --- |
+| `GET` | `/api/fotos` | Lista fotos con filtros y paginación | `200`, `400` |
+| `GET` | `/api/fotos/:id` | Consulta una foto con su álbum y etiquetas | `200`, `400`, `404` |
+| `POST` | `/api/fotos` | Crea una foto | `201` |
+| `PATCH` | `/api/fotos/:id` | Actualiza los campos enviados | `200`, `400`, `404` |
+| `DELETE` | `/api/fotos/:id` | Elimina una foto, sin cuerpo de respuesta | `204`, `400`, `404` |
+| `GET` | `/api/albumes` | Lista los álbumes ordenados por `id` | `200` |
+| `GET` | `/api/albumes/:id/fotos` | Consulta un álbum con sus fotos | `200`, `400`, `404` |
 
-Cada foto tiene la siguiente forma:
+Los identificadores de ruta pasan por `ParseIntPipe`: un valor como `abc` devuelve `400`. Si la foto o el álbum solicitado no existe, la API devuelve `404`. Los cuerpos de creación y actualización se reciben como `Partial<Foto>`; no hay DTO con validación del cuerpo.
+
+### Filtros del listado de fotos
+
+| Parámetro | Valor predeterminado | Comportamiento |
+| --- | --- | --- |
+| `min` | `0` | Calificación mínima incluida |
+| `max` | `5` | Calificación máxima incluida |
+| `q` | Sin filtro | Busca una coincidencia parcial en el título, sin distinguir mayúsculas y minúsculas |
+| `page` | `1` | Página solicitada, entero mayor que cero |
+| `limit` | `10` | Cantidad de fotos por página, entero mayor que cero |
+| `etiqueta` | Sin filtro | Filtra por el texto exacto de una etiqueta |
+| `orden` | Por `id` ascendente | Acepta `asc` o `desc` para ordenar por calificación, con desempate por `id` ascendente |
+
+Los filtros se pueden combinar. Se eliminan los espacios al inicio y al final de `q` y `etiqueta`; si quedan vacíos, no se aplican. Un rango con `min > max`, una página o límite menor que uno, un valor numérico inválido o un `orden` distinto de `asc` y `desc` devuelve `400`.
+
+Ejemplo:
+
+```text
+GET /api/fotos?min=3&max=5&q=Foto&page=1&limit=5&etiqueta=playa&orden=desc
+```
+
+El listado ya no devuelve un arreglo directamente. Su estructura es:
 
 ```json
 {
-  "id": 1,
-  "titulo": "Foto 1",
-  "descripcion": "Descripción de la foto 1",
-  "calificacion": 4.3,
-  "ruta": "https://picsum.photos/id/10/600/400",
-  "fotografo": null,
-  "creadoEn": "2026-11-19T19:30:00.000Z",
-  "actualizadoEn": "2026-11-19T19:30:00.000Z"
+  "data": [
+    {
+      "id": 1,
+      "titulo": "Foto 1",
+      "descripcion": null,
+      "calificacion": 4.3,
+      "ruta": "https://picsum.photos/id/10/600/400",
+      "fotografo": null,
+      "creadoEn": "2026-11-25T05:00:00.000Z",
+      "actualizadoEn": "2026-11-25T05:00:00.000Z",
+      "album": { "id": 1, "nombre": "Viajes" },
+      "etiquetas": [{ "id": 1, "texto": "playa" }]
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "limit": 5
 }
 ```
 
-## Qué hice en el proyecto
+`total` es la cantidad de fotos que cumplen los filtros antes de aplicar la paginación.
 
-### Parte 1: proyecto base
+## Ejecución
 
-- **Creación del proyecto:**
-
-  Se generó el proyecto con el Nest CLI. El proyecto trabaja con ES Modules, por lo que todas las importaciones relativas usan la extensión `.js` aunque los archivos sean `.ts`.
-
-- **Prefijo global:**
-
-  En `src/main.ts` se creó la aplicación con `NestFactory.create(AppModule)` y se agregó `app.setGlobalPrefix('api')`, de modo que todas las rutas comienzan con `/api`. El servidor escucha en el puerto definido por la variable de entorno `PORT`, o en el `3000` si no existe.
-
-- **Limpieza del módulo raíz:**
-
-  `AppModule` ya no usa el controlador ni el servicio de ejemplo que trae el proyecto. Solo configura la conexión a la base de datos e importa `FotosModule`.
-
-### Parte 2: conexión a PostgreSQL
-
-- **Dependencias:**
-
-  Se instalaron `@nestjs/typeorm`, `typeorm` y `pg`.
-
-- **Configuración:**
-
-  En `app.module.ts` se agregó `TypeOrmModule.forRoot()` con el tipo `postgres`, el host `localhost`, el puerto `5432`, el usuario, la contraseña y la base de datos `album`.
-
-  - `autoLoadEntities: true` registra automáticamente las entidades que cada módulo declara con `forFeature`, sin tener que listarlas a mano.
-  - `synchronize: true` hace que TypeORM cree o modifique la tabla según la entidad al iniciar el servidor. Es cómodo en desarrollo, pero no se debe usar en producción porque puede borrar datos.
-
-### Parte 3: entidad Foto
-
-- **De interfaz a clase:**
-
-  En `entities/foto.entity.ts`, `Foto` dejó de ser una interfaz y pasó a ser una clase marcada con `@Entity('fotos')`, ya que TypeORM necesita una clase que exista en tiempo de ejecución para leer sus decoradores.
-
-- **Columnas:**
-
-  - `id` con `@PrimaryGeneratedColumn()`: la base de datos genera el número automáticamente.
-  - `titulo` con `@Column({ length: 100 })`.
-  - `descripcion` de tipo `text` y opcional (`nullable: true`).
-  - `calificacion` de tipo `real`, con valor por defecto `0`, para aceptar decimales como `4.5`.
-  - `ruta` con la URL de la imagen.
-  - `fotografo` de tipo `text` y opcional.
-  - `creadoEn` con `@CreateDateColumn()` y `actualizadoEn` con `@UpdateDateColumn()`: TypeORM llena estas fechas solo al crear y al modificar.
-
-- **Módulo:**
-
-  `FotosModule` importa `TypeOrmModule.forFeature([Foto])`, que deja disponible el repositorio de `Foto` para inyectarlo en el servicio. También registra a `FotosController` y a `FotosService`, y exporta el servicio.
-
-### Parte 4: servicio con repositorio
-
-- **Inyección del repositorio:**
-
-  `FotosService` recibe el repositorio por el constructor con `@InjectRepository(Foto)`. Ya no existe el arreglo en memoria: todas las operaciones van a la base de datos.
-
-- **Métodos:**
-
-  Como consultar la base de datos toma tiempo, todos los métodos devuelven una `Promise`.
-
-  - `findAll()` usa `find({ order: { id: 'ASC' } })` para devolver las fotos ordenadas por `id`.
-  - `findOne(id)` usa `findOneBy({ id })`. Si no existe, lanza `NotFoundException` con el mensaje `Foto X no encontrada`, y Nest la convierte en una respuesta `404`.
-  - `create(datos)` arma la entidad con `create()` y la guarda con `save()`. El `id` y las fechas los pone la base de datos, así que ya no hace falta calcular el `id` a mano.
-  - `update(id, datos)` primero llama a `findOne(id)` (si no existe sale el `404`), copia los campos enviados con `Object.assign` y guarda con `save()`.
-  - `remove(id)` también reutiliza `findOne(id)` para el `404` y luego borra la foto con `remove()`.
-
-### Parte 5: controlador
-
-- **Rutas:**
-
-  `FotosController` usa `@Controller('fotos')` y recibe el servicio por el constructor. Define `@Get()` para listar, `@Get(':id')` para consultar una foto, `@Post()` para crear, `@Patch(':id')` para actualizar y `@Delete(':id')` para eliminar, tomando el cuerpo con `@Body()` como `Partial<Foto>`.
-
-- **Validación del parámetro:**
-
-  El `id` se lee con `@Param('id', ParseIntPipe)`. El *pipe* convierte el texto de la URL a número y, si no es un entero, responde `400` con el mensaje `Validation failed (numeric string is expected)` sin llegar a ejecutar el método.
-
-- **Códigos de estado:**
-
-  Nest responde `200` en los `GET` y `PATCH` y `201` en el `POST` sin necesidad de indicarlo. El `DELETE` responde `204 No Content` gracias a `@HttpCode(HttpStatus.NO_CONTENT)`.
-
-### Parte 6: datos de ejemplo (seed)
-
-Se creó `src/seed.ts`, un script que levanta la aplicación con `NestFactory.createApplicationContext(AppModule)` (sin abrir el servidor HTTP), obtiene el repositorio de `Foto` desde el `DataSource`, vacía la tabla con `clear()` e inserta 10 fotos de ejemplo. Cada una tiene una calificación aleatoria entre `0.0` y `5.0` y una imagen de `picsum.photos`.
-
-Se ejecuta con el script agregado en `package.json`:
-
-```bash
-npm run seed
-```
-
-> Al vaciar la tabla se borran todas las fotos existentes, así que solo se debe usar para reiniciar los datos de prueba.
-
-### Parte 7: persistencia de los datos
-
-En la versión anterior, al reiniciar el servidor la lista volvía a las fotos iniciales. Ahora las fotos creadas, modificadas o eliminadas quedan guardadas en PostgreSQL y siguen ahí después de reiniciar.
-
-### Verificación del funcionamiento
-
-Con PostgreSQL y el servidor en ejecución, se probaron las rutas desde PowerShell usando `curl.exe`:
-
-```powershell
-# Listar todas las fotos -> 200
-curl.exe -s -w " -> %{http_code}\n" http://localhost:3000/api/fotos
-
-# Foto que no existe -> 404
-curl.exe -s -w " -> %{http_code}\n" http://localhost:3000/api/fotos/99
-
-# Id que no es número -> 400
-curl.exe -s -w " -> %{http_code}\n" http://localhost:3000/api/fotos/abc
-
-# Crear una foto -> 201
-curl.exe --% -s -w " -> %{http_code}\n" -X POST -H "Content-Type: application/json" -d "{\"titulo\":\"Cerro\",\"calificacion\":4.5,\"ruta\":\"https://picsum.photos/id/200/600/400\"}" http://localhost:3000/api/fotos
-
-# Actualizar solo la calificación de la foto 1 -> 200
-curl.exe --% -s -w " -> %{http_code}\n" -X PATCH -H "Content-Type: application/json" -d "{\"calificacion\":2}" http://localhost:3000/api/fotos/1
-
-# Actualizar una foto que no existe -> 404
-curl.exe --% -s -w " -> %{http_code}\n" -X PATCH -H "Content-Type: application/json" -d "{\"titulo\":\"Nuevo\"}" http://localhost:3000/api/fotos/99
-
-# Eliminar la foto 2 -> 204
-curl.exe -s -w " -> %{http_code}\n" -X DELETE http://localhost:3000/api/fotos/2
-
-# Eliminar otra vez la foto 2 -> 404
-curl.exe -s -w " -> %{http_code}\n" -X DELETE http://localhost:3000/api/fotos/2
-```
-
-> En PowerShell se usa `curl.exe` en lugar de `curl`, y `--%` en las peticiones con cuerpo JSON para que las comillas lleguen intactas.
-
-Las rutas `GET` también se pueden abrir directamente en el navegador.
-
-## Ejecución del proyecto
-
-Con Node.js, npm y PostgreSQL instalados:
-
-1. Crear la base de datos `album` en PostgreSQL:
+1. Instalar Node.js, npm y PostgreSQL, y crear la base de datos:
 
    ```sql
    CREATE DATABASE album;
    ```
 
-2. Revisar en `src/app.module.ts` que el usuario y la contraseña coincidan con los de tu PostgreSQL.
+2. Revisar la conexión en `src/app.module.ts`. Actualmente usa `localhost`, puerto `5432`, usuario `postgres` y base de datos `album`. Ajustar el usuario y la contraseña según la instalación local. La conexión está definida directamente en ese archivo; no se carga desde `.env`.
 
 3. Instalar las dependencias:
 
    ```bash
-   npm install
+   npm ci
    ```
 
-4. (Opcional) Cargar las 10 fotos de ejemplo:
-
-   ```bash
-   npm run seed
-   ```
-
-5. Iniciar el servidor de desarrollo:
+4. Iniciar el servidor:
 
    ```bash
    npm run start:dev
    ```
 
-La API queda disponible en:
+La API queda disponible en `http://localhost:3000/api/fotos` y `http://localhost:3000/api/albumes`. El puerto se puede cambiar mediante `PORT`. La raíz `/` responde `404`.
 
-```text
-http://localhost:3000/api/fotos
+`autoLoadEntities: true` registra las entidades declaradas por los módulos. `synchronize: true` crea o ajusta las tablas al iniciar: esta configuración es para desarrollo, ya que puede modificar o eliminar datos. Las fotos, álbumes y relaciones se conservan al reiniciar el servidor.
+
+### Datos de ejemplo
+
+```bash
+npm run seed
 ```
 
-La terminal debe permanecer abierta mientras se utiliza la API.
+El script reinicia las tablas `foto_etiquetas`, `fotos`, `etiquetas` y `albumes`, incluidos sus identificadores. Después crea:
 
-> La raíz `http://localhost:3000/` responde `404`, ya que no tiene una ruta definida. Las rutas de la API comienzan con `/api`.
+- 3 álbumes: Viajes, Guayaquil y Naturaleza.
+- 6 etiquetas: playa, ciudad, noche, cielo, montaña y río.
+- 20 fotos con calificación aleatoria entre `0` y `5`, imagen de Picsum, un álbum y una o dos etiquetas distintas.
 
-> La tabla `fotos` se crea sola al iniciar el servidor gracias a `synchronize: true`.
+**Este comando elimina los datos existentes y debe usarse únicamente para reiniciar los datos de prueba.**
+
+## Comprobación desde PowerShell
+
+Con el servidor y PostgreSQL en ejecución:
+
+```powershell
+# Listado paginado y filtros
+curl.exe "http://localhost:3000/api/fotos?min=3&max=5&page=1&limit=5&orden=desc"
+curl.exe "http://localhost:3000/api/fotos?q=Foto&etiqueta=playa"
+
+# Álbumes y sus fotos
+curl.exe http://localhost:3000/api/albumes
+curl.exe http://localhost:3000/api/albumes/1/fotos
+
+# Crear una foto
+$foto = @{ titulo = 'Cerro'; calificacion = 4.5; ruta = 'https://picsum.photos/id/200/600/400' } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri http://localhost:3000/api/fotos -ContentType 'application/json' -Body $foto
+
+# Actualizar y eliminar una foto: sustituir 1 por el id correspondiente
+Invoke-RestMethod -Method Patch -Uri http://localhost:3000/api/fotos/1 -ContentType 'application/json' -Body '{"calificacion":2}'
+Invoke-RestMethod -Method Delete -Uri http://localhost:3000/api/fotos/1
+
+# Ejemplos de errores 400 y 404
+curl.exe -i "http://localhost:3000/api/fotos?min=5&max=2"
+curl.exe -i http://localhost:3000/api/fotos/abc
+curl.exe -i http://localhost:3000/api/fotos/999999
+```
+
+## Compilación, pruebas y formato
+
+| Comando | Uso |
+| --- | --- |
+| `npm run build` | Compila el proyecto |
+| `npm test` | Ejecuta las pruebas unitarias con Vitest |
+| `npm run test:watch` | Ejecuta las pruebas en modo observación |
+| `npm run test:cov` | Ejecuta las pruebas con cobertura |
+| `npm run test:e2e` | Ejecuta el archivo de pruebas de extremo a extremo |
+| `npm run lint` | Revisa el código con Oxlint y análisis de tipos |
+| `npm run format` | Aplica Prettier a `src` y `test` |
+
+La prueba unitaria actual comprueba el saludo del controlador de ejemplo, que no está registrado en `AppModule`. El archivo E2E conserva el caso inicial de `GET /` con ese saludo y requiere adaptación a las rutas actuales de la API y una conexión de pruebas antes de utilizarlo para validar fotos y álbumes.
 
 ## Autor
 
