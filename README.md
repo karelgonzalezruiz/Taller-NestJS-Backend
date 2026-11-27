@@ -12,7 +12,6 @@ API REST para gestionar fotos y consultar álbumes, con persistencia en PostgreS
 - Respuesta del listado de fotos con los campos `data`, `total`, `page` y `limit`.
 - Carga de ejemplo con 3 álbumes, 6 etiquetas y 20 fotos.
 - Configuración de Vitest, Oxlint, Prettier y finales de línea LF.
-- Documento de pruebas de relaciones, filtros, paginación, orden y validación, con capturas de las respuestas de la API.
 
 ## Tecnologías
 
@@ -57,7 +56,10 @@ backend/
 
 La entidad `Foto` contiene `id`, `titulo`, `descripcion`, `calificacion`, `ruta`, `fotografo`, `creadoEn` y `actualizadoEn`, además de las relaciones `album` y `etiquetas`. La descripción y el fotógrafo son opcionales; la calificación tiene un valor predeterminado de `0`.
 
-Un `Album` tiene `id`, `nombre` y la colección `fotos`. Una `Etiqueta` tiene `id`, `texto` único y su relación con las fotos. La tabla intermedia `foto_etiquetas` vincula ambas entidades usando las columnas `fotoId` y `etiqueta_id`.
+### Relaciones
+
+- **Álbum y fotos (1:N):** un `Album` tiene `id`, `nombre` y la colección `fotos`. Cada foto puede pertenecer a un álbum o tener la relación en `null`. Al eliminar un álbum, sus fotos se conservan y la relación queda en `null`.
+- **Fotos y etiquetas (N:M):** una `Etiqueta` tiene `id`, `texto` único y su colección `fotos`. Una foto puede tener varias etiquetas y una etiqueta puede estar asociada a varias fotos. La tabla intermedia `foto_etiquetas` registra estas asociaciones usando las columnas `fotoId` y `etiqueta_id`.
 
 El listado y la consulta individual de fotos cargan el álbum y las etiquetas. La consulta de fotos de un álbum devuelve el objeto del álbum con su colección `fotos`.
 
@@ -161,19 +163,50 @@ El script reinicia las tablas `foto_etiquetas`, `fotos`, `etiquetas` y `albumes`
 
 **Este comando elimina los datos existentes y debe usarse únicamente para reiniciar los datos de prueba.**
 
-## Comprobación desde PowerShell
+## Pruebas
+
+### Consultas desde PowerShell
 
 Con el servidor y PostgreSQL en ejecución:
 
 ```powershell
-# Listado paginado y filtros
-curl.exe "http://localhost:3000/api/fotos?min=3&max=5&page=1&limit=5&orden=desc"
-curl.exe "http://localhost:3000/api/fotos?q=Foto&etiqueta=playa"
+# Listado de fotos con su álbum y sus etiquetas
+curl.exe http://localhost:3000/api/fotos
+
+# Filtro por calificación y paginación
+curl.exe "http://localhost:3000/api/fotos?min=3&max=5&page=1&limit=3"
+
+# Búsqueda parcial por título
+curl.exe "http://localhost:3000/api/fotos?q=Foto%201"
+
+# Filtro por etiqueta y orden por calificación
+curl.exe "http://localhost:3000/api/fotos?etiqueta=playa"
+curl.exe "http://localhost:3000/api/fotos?orden=asc"
+curl.exe "http://localhost:3000/api/fotos?orden=desc"
 
 # Álbumes y sus fotos
 curl.exe http://localhost:3000/api/albumes
 curl.exe http://localhost:3000/api/albumes/1/fotos
 
+# Combinar filtros, paginación y orden
+curl.exe "http://localhost:3000/api/fotos?min=3&max=5&page=1&limit=5&etiqueta=playa&orden=desc"
+
+# Ejemplos de errores 400 y 404
+curl.exe -i "http://localhost:3000/api/fotos?min=abc"
+curl.exe -i "http://localhost:3000/api/fotos?min=5&max=2"
+curl.exe -i http://localhost:3000/api/fotos/abc
+curl.exe -i http://localhost:3000/api/fotos/999999
+```
+
+El listado de fotos permite comprobar la carga de álbumes y etiquetas, los filtros y la paginación. La consulta `/api/albumes/1/fotos` devuelve el álbum con su colección de fotos. Los valores numéricos inválidos producen un error `400`, y una foto inexistente devuelve `404`.
+
+Los resultados dependen de los datos existentes. El seed asigna calificaciones, álbumes y etiquetas aleatoriamente, por lo que los registros y los totales pueden variar entre cargas.
+
+### Crear, actualizar y eliminar fotos
+
+Con la API en ejecución, se pueden comprobar las operaciones de escritura:
+
+```powershell
 # Crear una foto
 $foto = @{ titulo = 'Cerro'; calificacion = 4.5; ruta = 'https://picsum.photos/id/200/600/400' } | ConvertTo-Json
 Invoke-RestMethod -Method Post -Uri http://localhost:3000/api/fotos -ContentType 'application/json' -Body $foto
@@ -181,45 +214,26 @@ Invoke-RestMethod -Method Post -Uri http://localhost:3000/api/fotos -ContentType
 # Actualizar y eliminar una foto: sustituir 1 por el id correspondiente
 Invoke-RestMethod -Method Patch -Uri http://localhost:3000/api/fotos/1 -ContentType 'application/json' -Body '{"calificacion":2}'
 Invoke-RestMethod -Method Delete -Uri http://localhost:3000/api/fotos/1
-
-# Ejemplos de errores 400 y 404
-curl.exe -i "http://localhost:3000/api/fotos?min=5&max=2"
-curl.exe -i http://localhost:3000/api/fotos/abc
-curl.exe -i http://localhost:3000/api/fotos/999999
 ```
 
-## Pruebas de relaciones
-
-Las capturas están en [Pruebas - Taller_NestJS-Backend-Relaciones.pdf](Pruebas%20-%20Taller_NestJS-Backend-Relaciones.pdf). El documento muestra las siguientes consultas sobre las relaciones de fotos con álbumes y etiquetas:
-
-| Página | Consulta `GET` | Resultado mostrado |
-| --- | --- | --- |
-| 1 | `/api/fotos?min=3&max=5&page=1&limit=3` | Fotos con calificación entre 3 y 5, con tres resultados por página, su álbum y sus etiquetas |
-| 2 | `/api/fotos?q=Foto%201` | Búsqueda parcial por título: coincide con `Foto 1` y con títulos como `Foto 10` |
-| 2 | `/api/albumes/1/fotos` | Álbum con `id=1` y su colección de fotos, usando la relación de uno a muchos |
-| 3 | `/api/fotos?min=abc` | Error `400` con el mensaje `Validation failed (numeric string is expected)` |
-| 3 | `/api/fotos?etiqueta=playa` | Fotos asociadas a la etiqueta `playa`, usando la relación de muchos a muchos |
-| 4 | `/api/fotos?orden=asc` | Fotos ordenadas de menor a mayor calificación |
-| 4 | `/api/fotos?orden=desc` | Fotos ordenadas de mayor a menor calificación |
-| 5 | `/api/fotos` | Primera página del listado, con el álbum y las etiquetas de cada foto |
-
-Los listados de fotos devuelven `data`, `total`, `page` y `limit`; sin parámetros de paginación, se utiliza la página `1` con un límite de `10`. La consulta de fotos de un álbum devuelve el objeto del álbum con su colección `fotos`.
-
-Para repetir estas consultas se necesita PostgreSQL con datos y la API en ejecución. Las calificaciones, la asignación de álbumes y las etiquetas del seed son aleatorias, y las fechas se generan al insertar los registros. Por eso, las consultas conservan el comportamiento y la estructura de respuesta de las capturas, pero los registros y los totales pueden variar según los datos de la base.
-
-## Compilación, pruebas y formato
+### Pruebas automatizadas
 
 | Comando | Uso |
 | --- | --- |
-| `npm run build` | Compila el proyecto |
 | `npm test` | Ejecuta las pruebas unitarias con Vitest |
 | `npm run test:watch` | Ejecuta las pruebas en modo observación |
 | `npm run test:cov` | Ejecuta las pruebas con cobertura |
 | `npm run test:e2e` | Ejecuta el archivo de pruebas de extremo a extremo |
-| `npm run lint` | Revisa el código con Oxlint y análisis de tipos |
-| `npm run format` | Aplica Prettier a `src` y `test` |
 
 La prueba unitaria actual comprueba el saludo del controlador de ejemplo, que no está registrado en `AppModule`. El archivo E2E conserva el caso inicial de `GET /` con ese saludo y requiere adaptación a las rutas actuales de la API y una conexión de pruebas antes de utilizarlo para validar fotos y álbumes.
+
+## Compilación y formato
+
+| Comando | Uso |
+| --- | --- |
+| `npm run build` | Compila el proyecto |
+| `npm run lint` | Revisa el código con Oxlint y análisis de tipos |
+| `npm run format` | Aplica Prettier a `src` y `test` |
 
 ## Autor
 
