@@ -12,6 +12,7 @@ API REST para gestionar fotos y consultar álbumes, con persistencia en PostgreS
 - Respuesta del listado de fotos con los campos `data`, `total`, `page` y `limit`.
 - Carga de ejemplo con 3 álbumes, 6 etiquetas y 20 fotos.
 - Configuración de Vitest, Oxlint, Prettier y finales de línea LF.
+- Documento de pruebas de relaciones, filtros, paginación, orden y validación, con capturas de las respuestas de la API.
 
 ## Tecnologías
 
@@ -186,6 +187,25 @@ curl.exe -i "http://localhost:3000/api/fotos?min=5&max=2"
 curl.exe -i http://localhost:3000/api/fotos/abc
 curl.exe -i http://localhost:3000/api/fotos/999999
 ```
+
+## Pruebas de relaciones
+
+Las capturas están en [Pruebas - Taller_NestJS-Backend-Relaciones.pdf](Pruebas%20-%20Taller_NestJS-Backend-Relaciones.pdf). El documento muestra las siguientes consultas sobre las relaciones de fotos con álbumes y etiquetas:
+
+| Página | Consulta `GET` | Resultado mostrado |
+| --- | --- | --- |
+| 1 | `/api/fotos?min=3&max=5&page=1&limit=3` | Fotos con calificación entre 3 y 5, con tres resultados por página, su álbum y sus etiquetas |
+| 2 | `/api/fotos?q=Foto%201` | Búsqueda parcial por título: coincide con `Foto 1` y con títulos como `Foto 10` |
+| 2 | `/api/albumes/1/fotos` | Álbum con `id=1` y su colección de fotos, usando la relación de uno a muchos |
+| 3 | `/api/fotos?min=abc` | Error `400` con el mensaje `Validation failed (numeric string is expected)` |
+| 3 | `/api/fotos?etiqueta=playa` | Fotos asociadas a la etiqueta `playa`, usando la relación de muchos a muchos |
+| 4 | `/api/fotos?orden=asc` | Fotos ordenadas de menor a mayor calificación |
+| 4 | `/api/fotos?orden=desc` | Fotos ordenadas de mayor a menor calificación |
+| 5 | `/api/fotos` | Primera página del listado, con el álbum y las etiquetas de cada foto |
+
+Los listados de fotos devuelven `data`, `total`, `page` y `limit`; sin parámetros de paginación, se utiliza la página `1` con un límite de `10`. La consulta de fotos de un álbum devuelve el objeto del álbum con su colección `fotos`.
+
+Para repetir estas consultas se necesita PostgreSQL con datos y la API en ejecución. Las calificaciones, la asignación de álbumes y las etiquetas del seed son aleatorias, y las fechas se generan al insertar los registros. Por eso, las consultas conservan el comportamiento y la estructura de respuesta de las capturas, pero los registros y los totales pueden variar según los datos de la base.
 
 ## Compilación, pruebas y formato
 
