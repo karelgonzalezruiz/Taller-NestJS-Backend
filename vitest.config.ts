@@ -1,6 +1,8 @@
 import { defineConfig } from 'vitest/config';
+import { metadataPlugin } from './test/metadata-plugin.js';
 
 export default defineConfig({
+  plugins: [metadataPlugin()],
   // Resolves the path aliases declared in tsconfig.json, including the ones
   // added by `nest g library`. Requires Vite 8, which ships this option.
   resolve: { tsconfigPaths: true },

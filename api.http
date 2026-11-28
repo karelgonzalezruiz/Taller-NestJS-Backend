@@ -1,0 +1,101 @@
+@api = http://localhost:3000/api
+
+### Listar con todos los filtros existentes: 200
+GET {{api}}/fotos?min=3&max=5&q=Foto&page=1&limit=5&etiqueta=playa&orden=desc
+
+### Listar albumes: 200
+GET {{api}}/albumes
+
+### Limite fuera de rango: 400
+GET {{api}}/fotos?limit=999
+
+### Parametro no numerico: 400
+GET {{api}}/fotos?min=abc
+
+### Cuerpo invalido y campo no permitido: 400
+POST {{api}}/fotos
+Content-Type: application/json
+
+{ "titulo": "", "calificacion": 9, "ruta": "no-url", "hack": 1 }
+
+### Crear un album propio para estas pruebas: 201
+# @name crearAlbum
+POST {{api}}/albumes
+Content-Type: application/json
+
+{ "nombre": "Sesion 5 {{$timestamp}}" }
+
+### Repetir el nombre del album: 409
+POST {{api}}/albumes
+Content-Type: application/json
+
+{ "nombre": "{{crearAlbum.response.body.$.nombre}}" }
+
+### Crear foto con album y etiquetas normalizadas sin duplicados: 201
+# @name crearFoto
+POST {{api}}/fotos
+Content-Type: application/json
+
+{
+  "titulo": "Cerro Santa Ana",
+  "descripcion": "Prueba de la sesion 5",
+  "calificacion": 4.8,
+  "ruta": "https://picsum.photos/id/1/600/400",
+  "fotografo": "Karel",
+  "albumId": {{crearAlbum.response.body.$.id}},
+  "etiquetas": [" Ciudad ", "faro", "FARO"]
+}
+
+### Consultar la foto creada: 200
+GET {{api}}/fotos/{{crearFoto.response.body.$.id}}
+
+### Actualizar solo la calificacion: 200
+PATCH {{api}}/fotos/{{crearFoto.response.body.$.id}}
+Content-Type: application/json
+
+{ "calificacion": 2.5 }
+
+### Reemplazar las etiquetas: 200
+PATCH {{api}}/fotos/{{crearFoto.response.body.$.id}}
+Content-Type: application/json
+
+{ "etiquetas": ["ciudad", "noche"] }
+
+### Referencia a un album inexistente: 400
+POST {{api}}/fotos
+Content-Type: application/json
+
+{
+  "titulo": "Referencia invalida",
+  "calificacion": 4,
+  "ruta": "https://picsum.photos/id/1/600/400",
+  "albumId": 2147483647,
+  "etiquetas": ["sin_huerfanas"]
+}
+
+### Nombre de album vacio: 400 en espanol
+POST {{api}}/albumes
+Content-Type: application/json
+
+{ "nombre": "   " }
+
+### Actualizar el album: 200
+PATCH {{api}}/albumes/{{crearAlbum.response.body.$.id}}
+Content-Type: application/json
+
+{ "nombre": "Sesion 5 editada {{$timestamp}}" }
+
+### Consultar el album y su coleccion de fotos: 200
+GET {{api}}/albumes/{{crearAlbum.response.body.$.id}}/fotos
+
+### Borrar el album propio, conservando su foto: 204 sin cuerpo
+DELETE {{api}}/albumes/{{crearAlbum.response.body.$.id}}
+
+### La foto sigue existiendo con album: null: 200
+GET {{api}}/fotos/{{crearFoto.response.body.$.id}}
+
+### Borrar la foto propia: 204 sin cuerpo
+DELETE {{api}}/fotos/{{crearFoto.response.body.$.id}}
+
+### La foto eliminada ya no existe: 404
+GET {{api}}/fotos/{{crearFoto.response.body.$.id}}
