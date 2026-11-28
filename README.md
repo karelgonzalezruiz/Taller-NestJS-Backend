@@ -2,26 +2,17 @@
 
 API REST para gestionar fotos y álbumes, con persistencia en PostgreSQL mediante TypeORM, validación de entradas con DTOs y manejo de errores de base de datos. El proyecto está organizado en módulos, controladores, servicios y entidades, y todas las rutas comienzan con `/api`.
 
-## Novedades
+## Desarrollo del proyecto
 
-- CRUD de álbumes con nombre único y consulta de sus fotos.
-- DTOs para crear, actualizar y filtrar fotos, con validación global y mensajes en español.
-- Creación y edición de fotos mediante `albumId` y etiquetas como texto, normalizadas y sin duplicados.
-- Actualización parcial con `PartialType`: los campos omitidos conservan su valor y las etiquetas enviadas reemplazan las asociaciones anteriores.
-- Filtro de errores de PostgreSQL: duplicados responden `409` y referencias inexistentes responden `400`.
-- Pruebas de integración para validar el CRUD, las relaciones, las transacciones y las consultas de las versiones anteriores.
+El desarrollo comenzó con la API de fotos: se definieron los datos de cada imagen, la conexión a PostgreSQL y las operaciones para crear, listar, consultar, actualizar y eliminar registros. Con ello, las fotos pasaron a guardarse en la base de datos y a conservarse al reiniciar el servidor. Las comprobaciones de este avance están en [Pruebas del backend](Pruebas%20-%20Taller_NestJS-Backend.pdf).
 
-Se conservan las relaciones de álbumes y etiquetas, los filtros por calificación, título y etiqueta, la paginación y el orden por calificación. Al eliminar un álbum, sus fotos permanecen con la relación en `null`.
+Después se incorporaron los álbumes y las etiquetas para organizar las fotos. Se estableció la relación de un álbum con muchas fotos y la asociación de muchas fotos con muchas etiquetas. A partir de esas relaciones se añadieron la consulta de fotos de un álbum, el filtro por etiqueta, la búsqueda por título, el rango de calificación, la paginación y el orden de los resultados. Estos cambios se comprobaron en [Pruebas de relaciones](Pruebas%20-%20Taller_NestJS-Backend-Relaciones.pdf).
 
-## Versiones del proyecto
+Sobre esa base se añadieron los DTOs y la validación global para revisar los datos antes de llegar a los servicios. La API ahora rechaza campos desconocidos, títulos vacíos, calificaciones fuera de rango, direcciones de imagen inválidas y parámetros de consulta incorrectos, con mensajes en español. La actualización parcial reutiliza las reglas de creación y conserva los valores que no se envían.
 
-El proyecto se ha desarrollado en tres entregas, cada una con su documento de pruebas. Este README describe la tercera versión, que amplía las anteriores.
+La creación y edición de fotos también se ampliaron para recibir `albumId` y etiquetas como texto. Las etiquetas se normalizan, se reutilizan cuando ya existen y se crean cuando son nuevas, sin duplicarlas. Estas operaciones usan transacciones para revertir sus cambios si ocurre un error.
 
-| Versión | Funcionalidad | Documento de pruebas |
-| --- | --- | --- |
-| 1. Backend inicial | API de fotos con NestJS, operaciones CRUD y persistencia en PostgreSQL | [Pruebas del backend](Pruebas%20-%20Taller_NestJS-Backend.pdf) |
-| 2. Relaciones | Álbumes y etiquetas, relaciones 1:N y N:M, filtros, paginación y orden del listado de fotos | [Pruebas de relaciones](Pruebas%20-%20Taller_NestJS-Backend-Relaciones.pdf) |
-| 3. CRUD, validación y errores | DTOs, validación global, fotos con álbum y etiquetas, manejo de errores de PostgreSQL y CRUD de álbumes con nombre único | [Pruebas de CRUD, validación y errores](Pruebas%20-%20Taller_NestJS-Backend-CRUD.pdf) |
+Finalmente se completó el CRUD de álbumes con nombres únicos y se incorporó el manejo de errores de PostgreSQL: un nombre duplicado devuelve `409` y una referencia inexistente devuelve `400`. Al eliminar un álbum, sus fotos permanecen con `album: null`. Las validaciones, las operaciones con relaciones y este comportamiento están documentados en [Pruebas de CRUD, validación y errores](Pruebas%20-%20Taller_NestJS-Backend-CRUD.pdf). Las pruebas automatizadas comprueban estos avances junto con los filtros, el orden y la paginación que ya estaban disponibles.
 
 ## Tecnologías
 
@@ -32,6 +23,8 @@ El proyecto se ha desarrollado en tres entregas, cada una con su documento de pr
 - Vitest y Supertest para pruebas; Oxlint y Prettier para revisión y formato.
 
 ## Estructura
+
+La organización del código mantiene separados los módulos, los controladores, los servicios, los DTOs y las entidades:
 
 ```text
 backend/
@@ -184,6 +177,8 @@ La API queda disponible en `http://localhost:3000/api/fotos` y `http://localhost
 
 ### Datos de ejemplo
 
+El proyecto incluye una carga de datos de ejemplo que se ejecuta con:
+
 ```bash
 npm run seed
 ```
@@ -198,15 +193,13 @@ El script reinicia las tablas `foto_etiquetas`, `fotos`, `etiquetas` y `albumes`
 
 ## Pruebas
 
-### Peticiones de la sesión 5
-
-Las evidencias de las funciones nuevas están en [Pruebas de CRUD, validación y errores](Pruebas%20-%20Taller_NestJS-Backend-CRUD.pdf). El documento reúne 10 pruebas de terminal y navegador: validación de entradas, creación y edición de fotos con álbum y etiquetas, errores de referencia, nombres de álbum duplicados y conservación de fotos al eliminar un álbum.
+### Peticiones HTTP
 
 El archivo `api.http` permite comprobar las validaciones, la creación y edición de fotos con álbum y etiquetas, los errores de referencia y el CRUD de álbumes con REST Client de VS Code. Las peticiones de creación tienen nombre y sus respuestas proporcionan los identificadores utilizados por las siguientes; se deben ejecutar en orden. También contiene consultas de regresión para los filtros anteriores.
 
 ### Consultas desde PowerShell
 
-Con el servidor y PostgreSQL en ejecución:
+Con el servidor y PostgreSQL en ejecución, también se pueden realizar las consultas desde PowerShell:
 
 ```powershell
 # Listado de fotos con su álbum y sus etiquetas
@@ -243,7 +236,7 @@ Los resultados dependen de los datos existentes. El seed asigna calificaciones, 
 
 ### Crear, actualizar y eliminar fotos
 
-Con la API en ejecución, se pueden comprobar las operaciones de escritura:
+Para comprobar la creación, actualización y eliminación de fotos, se puede utilizar el identificador devuelto por la API:
 
 ```powershell
 # Crear una foto
@@ -285,7 +278,7 @@ Repetir un nombre al crear o editar devuelve `409`. Eliminar un álbum devuelve 
 
 Las pruebas unitarias comprueban el controlador de ejemplo y el filtro de errores de PostgreSQL. Las pruebas E2E verifican validaciones, CRUD de fotos y álbumes, etiquetas, transacciones y regresiones de filtros, orden y paginación.
 
-Las E2E usan un esquema temporal `sesion5_test_<identificador>` que se elimina al terminar; no usan las tablas de desarrollo. Por defecto se conectan a la misma instalación local de PostgreSQL. Se puede elegir otra conexión con `TEST_DB_HOST`, `TEST_DB_PORT`, `TEST_DB_USER`, `TEST_DB_PASSWORD` y `TEST_DB_NAME`. El usuario de pruebas debe poder crear y eliminar su esquema temporal.
+Las E2E usan un esquema temporal con un identificador único que se elimina al terminar; no usan las tablas de desarrollo. Por defecto se conectan a la misma instalación local de PostgreSQL. Se puede elegir otra conexión con `TEST_DB_HOST`, `TEST_DB_PORT`, `TEST_DB_USER`, `TEST_DB_PASSWORD` y `TEST_DB_NAME`. El usuario de pruebas debe poder crear y eliminar su esquema temporal.
 
 ## Compilación y formato
 
